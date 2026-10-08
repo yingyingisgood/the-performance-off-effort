@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Performance of Effort — Demo v14</title>
+<style>
+:root{
+  --bg:#ffffff;
+  --panel:#ffffffee;
+  --line:rgba(0,0,0,.15);
+  --ink:#111111;
+  --muted:#6f6f6f;
+  --coral:#ff6d5c;
+  --acid:#c8ff2b;
+  --sky:#8cc5ff;
+  --pale:#f6f6f3;
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:Arial,Helvetica,sans-serif;color:var(--ink)}
+button,input,textarea{font:inherit}
+#app{position:relative;width:100%;height:100%}
+#asciiBg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;opacity:.72}
+#stage{position:absolute;inset:0;width:100%;height:100%;z-index:4;background:transparent;cursor:grab}
+#stage.dragging{cursor:grabbing}
+
+#header{position:absolute;left:26px;top:20px;right:26px;z-index:20;max-width:none}
+#title{margin:0;font-size:54px;line-height:.95;letter-spacing:-.045em;font-weight:800;text-transform:uppercase;white-space:nowrap}
+#title .c1{color:var(--coral)}
+#title .c2{color:var(--ink)}
+#title .c3{color:var(--acid)}
+#subtitle{margin-top:8px;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:rgba(0,0,0,.58);max-width:760px}
+
+#controls{position:absolute;right:28px;top:24px;display:flex;gap:8px;z-index:20}
+button{height:42px;border:1px solid rgba(0,0,0,.28);background:var(--panel);padding:0 14px;cursor:pointer;font-size:11px;letter-spacing:.12em;text-transform:uppercase;transition:background .18s ease, transform .18s ease}
+button:hover{background:#f5f5f2}
+button:active{transform:translateY(1px)}
+.zoom{width:42px;padding:0;font-size:24px;line-height:1}
+
+#metrics{
+  position:absolute;left:26px;top:118px;bottom:26px;width:260px;z-index:15;
+  border-right:1px solid var(--line);padding-right:16px;
+  display:flex;flex-direction:column;gap:14px
+}
+.metric-block{padding-bottom:12px;border-bottom:1px solid rgba(0,0,0,.1)}
+.metric-block:last-child{border-bottom:none;padding-bottom:0}
+.metric-label{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:rgba(0,0,0,.58);margin-bottom:8px}
+.metric-value{font-size:38px;line-height:.95;font-weight:800;letter-spacing:-.05em}
+.metric-sub{margin-top:5px;font-size:10px;line-height:1.45;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,0,0,.58)}
+#waveCanvas{width:100%;height:112px;border:1px solid rgba(0,0,0,.12);background:#fbfbf9;display:block}
+#legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,0,0,.72)}
+.legend-item i{width:11px;height:11px;display:inline-block}
+.legend-item .l1{background:var(--coral)}
+.legend-item .l2{background:var(--acid)}
+.legend-item .l3{background:#ffffff;border:1px solid rgba(0,0,0,.14)}
+#statsGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 12px}
+.stat .s-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(0,0,0,.54);margin-bottom:4px}
+.stat .s-value{font-size:26px;font-weight:800;line-height:1}
+.stat .s-sub{font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:rgba(0,0,0,.48);margin-top:3px}
+#systemNote{font-size:11px;line-height:1.55;color:rgba(0,0,0,.72)}
+#phaseTags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.phase{padding:6px 8px;border:1px solid rgba(0,0,0,.16);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,0,0,.45)}
+.phase.active{background:var(--acid);color:#111;border-color:rgba(0,0,0,.35)}
+
+#panel{
+  position:absolute;right:26px;top:90px;bottom:26px;width:min(32vw,430px);z-index:16;
+  border-left:1px solid var(--line);padding-left:16px;
+  display:flex;flex-direction:column;
+  background:linear-gradient(to right,rgba(255,255,255,0),rgba(255,255,255,.82) 20%,rgba(255,255,255,.98));
+}
+#bigPrompt{position:absolute;left:16px;right:16px;top:6px;font-size:44px;line-height:.92;font-weight:800;letter-spacing:-.05em;color:#111;pointer-events:none;transition:opacity .25s ease,transform .25s ease;z-index:30}
+#bigPrompt small{display:block;margin-top:10px;font-size:14px;line-height:1.15;letter-spacing:.04em;font-weight:500;color:rgba(0,0,0,.58)}
+#bigPrompt.hide{opacity:0;transform:translateY(-10px)}
+#panel h2{margin:140px 0 10px;font-size:11px;letter-spacing:.16em;text-transform:uppercase}
+#sourceWrap{flex:1;overflow:auto;border-top:1px solid rgba(0,0,0,.12);border-bottom:1px solid rgba(0,0,0,.12);padding:12px 10px 12px 0;background:rgba(255,255,255,.75)}
+#source{font-family:"Courier New",monospace;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word;color:#1f1f1f}
+.done{color:rgba(0,0,0,.22)}
+.current{background:var(--acid);color:#111}
+.future{color:rgba(0,0,0,.72)}
+#typeLabel{margin:12px 0 6px;font-size:10px;letter-spacing:.14em;text-transform:uppercase}
+#typeInput{width:100%;height:96px;border:1px solid rgba(0,0,0,.2);background:#fff;padding:12px;outline:none;resize:none;font-family:"Courier New",monospace;font-size:14px;line-height:1.42}
+#meta{display:flex;justify-content:space-between;gap:10px;margin-top:8px;font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:rgba(0,0,0,.72)}
+#count,#state{max-width:49%}
+#state{text-align:right}
+
+#hint{position:absolute;left:26px;bottom:20px;z-index:18;width:244px;font-size:9px;line-height:1.5;letter-spacing:.1em;text-transform:uppercase;color:rgba(0,0,0,.52);padding-top:10px;border-top:1px solid rgba(0,0,0,.1)}
+#errorPile{position:absolute;left:0;right:0;bottom:0;height:170px;z-index:10;overflow:hidden;pointer-events:none}
+.falling-char{position:absolute;top:-24px;color:var(--coral);font:700 18px "Courier New",monospace;animation:drop var(--dur) cubic-bezier(.2,.7,.28,1) forwards}
+.falling-char.backspace{color:rgba(0,0,0,.35)}
+.ghost-char{position:absolute;pointer-events:none;color:rgba(140,197,255,.55);font:700 14px "Courier New",monospace;animation:ghostFade 6.5s linear forwards}
+
+@keyframes drop{to{transform:translate(var(--drift),calc(164px - var(--rest))) rotate(var(--rot))}}
+@keyframes ghostFade{0%{opacity:.85;transform:translateY(0)}100%{opacity:0;transform:translateY(-24px)}}
+
+@media(max-width:1280px){#title{font-size:42px}#panel{width:min(35vw,420px)}#metrics{width:220px}#bigPrompt{font-size:36px}#hint{width:204px}}
+@media(max-width:1040px){#metrics{display:none}#panel{width:min(40vw,420px)}#hint{display:none}#title{font-size:34px}}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="asciiBg"></canvas>
+  <svg id="stage" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice"></svg>
+
+  <header id="header">
+    <h1 id="title"><span class="c1">THE</span> <span class="c2">PERFORMANCE</span> <span class="c3">OF</span> <span class="c1">EFFORT</span></h1>
+    <div id="subtitle">pseudo-text, repeated labour, and the performance of productivity</div>
+  </header>
+
+  <div id="controls">
+    <button class="zoom" id="zoomOut">−</button>
+    <button class="zoom" id="zoomIn">+</button>
+    <button id="restart">Restart</button>
+  </div>
+
+  <aside id="metrics">
+    <div class="metric-block">
+      <div class="metric-label">Live typing waveform</div>
+      <canvas id="waveCanvas" width="420" height="180"></canvas>
+      <div id="legend">
+        <div class="legend-item"><i class="l1"></i>speed</div>
+        <div class="legend-item"><i class="l2"></i>density</div>
+        <div class="legend-item"><i class="l3"></i>errors</div>
+      </div>
+    </div>
+    <div class="metric-block">
+      <div class="metric-label">Typing speed</div>
+      <div class="metric-value" id="liveSpeed">0.0</div>
+      <div class="metric-sub">chars per second · rolling live measure</div>
+    </div>
+    <div class="metric-block">
+      <div id="statsGrid">
+        <div class="stat"><div class="s-label">Words</div><div class="s-value" id="wordsStat">0</div><div class="s-sub">correct words</div></div>
+        <div class="stat"><div class="s-label">WPM</div><div class="s-value" id="wpmStat">0</div><div class="s-sub">rolling estimate</div></div>
+        <div class="stat"><div class="s-label">Errors</div><div class="s-value" id="errorStat">0</div><div class="s-sub">wrong keys</div></div>
+        <div class="stat"><div class="s-label">Backspace</div><div class="s-value" id="backspaceStat">0</div><div class="s-sub">corrections</div></div>
+        <div class="stat"><div class="s-label">Accuracy</div><div class="s-value" id="accuracyStat">100%</div><div class="s-sub">correct / total</div></div>
+        <div class="stat"><div class="s-label">Overlap</div><div class="s-value" id="overlapStat">0</div><div class="s-sub">extra copies</div></div>
+      </div>
+    </div>
+    <div class="metric-block">
+      <div class="metric-label">System state</div>
+      <div id="systemNote">The interface does not reward meaningful content. It records visible effort and translates that behaviour into density, repetition, overlap, drift, and residue.</div>
+      <div id="phaseTags">
+        <div class="phase active" data-state="start">Start</div>
+        <div class="phase" data-state="build">Build</div>
+        <div class="phase" data-state="intensify">Intensify</div>
+        <div class="phase" data-state="accumulate">Accumulate</div>
+        <div class="phase" data-state="hesitate">Hesitate</div>
+      </div>
+    </div>
+  </aside>
+
+  <aside id="panel">
+    <div id="bigPrompt">TYPE IN THE BOX<br>ON THE RIGHT<small>copy the pseudo-text exactly to construct the room. When typing slows down, the text starts to drift.</small></div>
+    <h2>Copy this pseudo-text exactly</h2>
+    <div id="sourceWrap"><div id="source"></div></div>
+    <div id="typeLabel">Your input</div>
+    <textarea id="typeInput" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+    <div id="meta">
+      <span id="count">0 correct characters · 0 words</span>
+      <span id="state">building room · 0/100 chars</span>
+    </div>
+  </aside>
+
+  <div id="hint">Drag to orbit · Scroll or use + / − to zoom · 100 correct characters reveal the room · More typing creates offset overlaps · Wrong keys and backspaces accumulate below · Hesitation makes the typographic room drift.</div>
+  <div id="errorPile"></div>
+  <div id="ghostLayer"></div>
+</div>
+<script>
+(() => {
+const NS = 'http://www.w3.org/2000/svg';
+const C = { coral:'#ff6d5c', acid:'#c8ff2b', sky:'#8cc5ff', ink:'#111111', white:'#ffffff' };
+const FULL_REVEAL_CHARS = 100;
+const stage = document.getElementById('stage');
+const asciiBg = document.getElementById('asciiBg');
+const bgCtx = asciiBg.getContext('2d');
+const sourceEl = document.getElementById('source');
+const sourceWrap = document.getElementById('sourceWrap');
+const input = document.getElementById('typeInput');
+const countEl = document.getElementById('count');
+const stateEl = document.getElementById('state');
+const pile = document.getElementById('errorPile');
+const bigPrompt = document.getElementById('bigPrompt');
+const ghostLayer = document.getElementById('ghostLayer');
+const liveSpeedEl = document.getElementById('liveSpeed');
+const wordsStatEl = document.getElementById('wordsStat');
+const wpmStatEl = document.getElementById('wpmStat');
+const errorStatEl = document.getElementById('errorStat');
+const backspaceStatEl = document.getElementById('backspaceStat');
+const accuracyStatEl = document.getElementById('accuracyStat');
+const overlapStatEl = document.getElementById('overlapStat');
+const phaseTags = [...document.querySelectorAll('.phase')];
+const waveCanvas = document.getElementById('waveCanvas');
+const waveCtx = waveCanvas.getContext('2d');
+
+const pseudoBlocks = [
+  'Loram vestri calven torim exalla nuveth pralen soma dristal enori valen. ',
+  'Trassa monel quorin sevata rilum pectori noven ardis claren vimo setral poren. ',
+  'Neral opavi sentor relum casta priven alori vessa trinor cambri sola quenta noravi. ',
+  'Feral cinti molven sarel optra densari volen pira casset norem ulavi trena moris. ',
+  'Mirel astra colven nuvari prasta retun selen oravi matera qulix peren dista coren. ',
+  'Doran evila setra corrin manel vorta pelli nuren calta sevori presen toral imera valin. '
+];
+const pseudoText = Array.from({length:260},(_,i)=>pseudoBlocks[i%pseudoBlocks.length]).join('');
+
+let correct=0,totalWords=0,typedHistory='',displayBuffer='';
+let mistakeCount=0,backspaceCount=0,totalAttempts=0;
+let typingEvents=[],waveHistory=[];
+let rollingCPS=0,rollingWPM=0,densityValue=.08,typingIntensity=0,sceneNoise=0;
+let lastCharTime=0,sessionStart=performance.now(),lastMetricTick=performance.now();
+let currentState='start';
+let camera={ yaw:-0.64, pitch:0.34, dist:1080, target:[0,115,0] };
+let dragging=false,lx=0,ly=0;
+let idleMs=9999,idleFloat=0;
+
+function esc(s){ return s.replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m])) }
+function currentExpectedChar(){ return pseudoText[correct % pseudoText.length]; }
+function updateSource(){
+  const idx = correct % pseudoText.length;
+  const before = pseudoText.slice(Math.max(0, idx - 180), idx);
+  const current = pseudoText[idx] || ' ';
+  const after = pseudoText.slice(idx + 1, idx + 2200);
+  sourceEl.innerHTML = `<span class="done">${esc(before)}</span><span class="current">${esc(current)}</span><span class="future">${esc(after)}</span>`;
+  sourceWrap.scrollTop = 0;
+}
+function updateCounter(){
+  countEl.textContent = `${correct.toLocaleString()} correct characters · ${totalWords.toLocaleString()} words`;
+  if(correct < FULL_REVEAL_CHARS) stateEl.textContent = `building room · ${correct}/${FULL_REVEAL_CHARS} chars`;
+  else stateEl.textContent = `overlap phase · +${(correct - FULL_REVEAL_CHARS).toLocaleString()} chars`;
+}
+function rememberChar(ch){
+  typedHistory += ch;
+  if(typedHistory.length > 5200) typedHistory = typedHistory.slice(-5200);
+  displayBuffer += ch;
+  if(displayBuffer.length > 340) displayBuffer = displayBuffer.slice(-340);
+  input.value = displayBuffer;
+  input.setSelectionRange(input.value.length,input.value.length);
+}
+function registerTypingEvent(type,ch=''){
+  const now = performance.now();
+  typingEvents.push({t:now,type,ch});
+  while(typingEvents.length && now - typingEvents[0].t > 5000) typingEvents.shift();
+  if(type==='correct' || type==='error') lastCharTime = now;
+}
+function onCorrectChar(ch){
+  correct++; totalAttempts++; registerTypingEvent('correct',ch); rememberChar(ch);
+  if(/[A-Za-z]/.test(ch) && (correct===1 || !/[A-Za-z]/.test(pseudoText[(correct-2+pseudoText.length)%pseudoText.length]))) totalWords++;
+  updateSource(); updateCounter(); updateMetrics(); render();
+}
+function dropChar(ch,kind='error'){
+  if(!ch) return;
+  const e=document.createElement('span');
+  e.className=`falling-char ${kind==='backspace'?'backspace':''}`;
+  e.textContent= ch === ' ' ? '·' : ch;
+  e.style.left=(4 + Math.random()*92)+'%';
+  e.style.setProperty('--dur',(0.76 + Math.random()*1.02)+'s');
+  e.style.setProperty('--drift',(-44 + Math.random()*88)+'px');
+  e.style.setProperty('--rot',(-140 + Math.random()*280)+'deg');
+  const pileBoost = mistakeCount * 2.6 + backspaceCount * 1.8;
+  e.style.setProperty('--rest',(12 + Math.min(126,pileBoost + Math.random()*20))+'px');
+  pile.appendChild(e);
+}
+function onMistake(ch){ mistakeCount++; totalAttempts++; registerTypingEvent('error',ch); dropChar(ch,'error'); updateMetrics(); render(); }
+function spawnGhost(){
+  const g=document.createElement('span');
+  g.className='ghost-char';
+  g.textContent=(typedHistory.slice(-1) || '⌫');
+  g.style.left=(255 + Math.random()*Math.max(120,innerWidth-760))+'px';
+  g.style.top=(110 + Math.random()*Math.max(240,innerHeight-320))+'px';
+  g.style.transform=`rotate(${(-18+Math.random()*36).toFixed(1)}deg)`;
+  ghostLayer.appendChild(g); setTimeout(()=>g.remove(),6600);
+}
+function onBackspace(){ backspaceCount++; totalAttempts++; registerTypingEvent('backspace','⌫'); spawnGhost(); updateMetrics(); render(); }
+function handleTypedChar(ch){
+  if(!bigPrompt.classList.contains('hide')) bigPrompt.classList.add('hide');
+  const expected=currentExpectedChar();
+  if(ch===expected) onCorrectChar(ch); else onMistake(ch);
+}
+function overlapAmount(){
+  if(correct <= FULL_REVEAL_CHARS) return 0;
+  const base = Math.floor((correct - FULL_REVEAL_CHARS) / 34) + 1;
+  const persistence = Math.floor((performance.now()-sessionStart)/90000);
+  return Math.min(8, base + persistence);
+}
+function metricSnapshot(){
+  const now = performance.now();
+  const recent = typingEvents.filter(e => now - e.t <= 4000);
+  const correctRecent = recent.filter(e=>e.type==='correct').length;
+  const errorRecent = recent.filter(e=>e.type==='error').length;
+  const backRecent = recent.filter(e=>e.type==='backspace').length;
+  rollingCPS = +(correctRecent / 4).toFixed(1);
+  rollingWPM = Math.round((correctRecent / 4) * 12);
+  const accuracy = totalAttempts ? (correct / totalAttempts) : 1;
+  idleMs = lastCharTime ? now - lastCharTime : 99999;
+  const durationMin = Math.max(0,(now-sessionStart)/60000);
+  typingIntensity = Math.min(1, (correctRecent + errorRecent * 1.2 + backRecent * .6) / 18);
+  const pauseFactor = idleMs > 1400 ? Math.max(.08, 1 - (idleMs-1400)/5200) : 1;
+  densityValue = Math.min(.95, (.08 + typingIntensity*.28 + Math.min(.18,(mistakeCount+backspaceCount)*.004) + Math.min(.18,durationMin*.025)) * pauseFactor);
+  sceneNoise = Math.min(1, errorRecent*.09 + backRecent*.07 + mistakeCount*.01);
+  idleFloat = correct > 0 ? Math.max(0, Math.min(1, (idleMs - 650) / 2400)) : 0;
+  return {correctRecent,errorRecent,backRecent,accuracy,durationMin};
+}
+function updateMetrics(){
+  const m = metricSnapshot();
+  liveSpeedEl.textContent = rollingCPS.toFixed(1);
+  wordsStatEl.textContent = totalWords.toLocaleString();
+  wpmStatEl.textContent = rollingWPM.toLocaleString();
+  errorStatEl.textContent = mistakeCount.toLocaleString();
+  backspaceStatEl.textContent = backspaceCount.toLocaleString();
+  accuracyStatEl.textContent = `${Math.round(m.accuracy*100)}%`;
+  overlapStatEl.textContent = overlapAmount().toString();
+  if(correct===0) currentState='start';
+  else if(idleFloat > .42) currentState='hesitate';
+  else if(correct < FULL_REVEAL_CHARS) currentState='build';
+  else if(overlapAmount() < 4) currentState='intensify';
+  else currentState='accumulate';
+  phaseTags.forEach(p=>p.classList.toggle('active',p.dataset.state===currentState));
+}
+
+function seg(a,b){ return {a,b}; }
+function box(x,y,z,w,h,d){
+  const x1=x-w/2, x2=x+w/2, y1=y, y2=y+h, z1=z-d/2, z2=z+d/2;
+  const p=[[x1,y1,z1],[x2,y1,z1],[x2,y1,z2],[x1,y1,z2],[x1,y2,z1],[x2,y2,z1],[x2,y2,z2],[x1,y2,z2]];
+  const E=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+  return E.map(([i,j])=>seg(p[i],p[j]));
+}
+function hatchedRect(cx,cy,cz,w,h,spacing=12,axis='v'){
+  const s=[]; const hw=w/2, hh=h/2;
+  if(axis==='v') for(let x=-hw+spacing*.5;x<hw;x+=spacing) s.push(seg([cx+x,cy-hh,cz],[cx+x,cy+hh,cz]));
+  else for(let y=-hh+spacing*.5;y<hh;y+=spacing) s.push(seg([cx-hw,cy+y,cz],[cx+hw,cy+y,cz]));
+  return s;
+}
+function detailedWindow(cx, cy, z){
+  const s=[]; const widths=[92,82,72];
+  widths.forEach((w,i)=>{ const h=168-i*12; s.push(...box(cx, cy-h/2, z, w, h, 4)); });
+  s.push(seg([cx-36, cy, z-2],[cx+36, cy, z-2]));
+  s.push(seg([cx-50, cy+90, z-1],[cx+50, cy+90, z-1]));
+  s.push(seg([cx-52, cy-94, z-1],[cx+52, cy-94, z-1]));
+  s.push(...hatchedRect(cx, cy+42, z-2, 64, 58, 11, 'h'));
+  s.push(...hatchedRect(cx, cy-45, z-2, 64, 82, 11, 'v'));
+  return s;
+}
+function detailedDesk(){
+  const s=[];
+  const top=[[-220,120,-40],[70,120,-10],[45,120,100],[-250,120,68]];
+  for(let i=0;i<4;i++) s.push(seg(top[i], top[(i+1)%4]));
+  for(let t=.04;t<.98;t+=.08){
+    const ax=top[0][0]+(top[3][0]-top[0][0])*t, az=top[0][2]+(top[3][2]-top[0][2])*t;
+    const bx=top[1][0]+(top[2][0]-top[1][0])*t, bz=top[1][2]+(top[2][2]-top[1][2])*t;
+    s.push(seg([ax,120,az],[bx,120,bz]));
+  }
+  s.push(seg([-165,120,5],[-205,0,20]), seg([-145,120,-5],[-105,0,10]), seg([10,120,34],[45,0,55]), seg([25,120,20],[-5,0,38]), seg([0,102,18],[32,102,32]));
+  return s;
+}
+function detailedChair(cx, cz){
+  const s=[]; const seatY=72, frontZ=cz-26, backZ=cz+32, leftX=cx-43, rightX=cx+43;
+  s.push(seg([leftX,seatY,frontZ],[rightX,seatY,frontZ]), seg([rightX,seatY,frontZ],[rightX,seatY,backZ]), seg([rightX,seatY,backZ],[leftX,seatY,backZ]), seg([leftX,seatY,backZ],[leftX,seatY,frontZ]));
+  for(let z=frontZ+5; z<backZ; z+=8) s.push(seg([leftX+4,seatY+1,z],[rightX-4,seatY+1,z]));
+  [[leftX,frontZ],[rightX,frontZ],[leftX,backZ],[rightX,backZ]].forEach(([x,z])=>{ s.push(seg([x,seatY,z],[x,0,z]), seg([x+3,seatY,z+2],[x+3,0,z+2])); });
+  const backTop=212;
+  s.push(seg([leftX,seatY,backZ],[leftX,backTop,backZ]), seg([rightX,seatY,backZ],[rightX,backTop,backZ]), seg([leftX,backTop,backZ],[rightX,backTop,backZ]));
+  for(let x=leftX+12; x<rightX-6; x+=15) s.push(seg([x,seatY+18,backZ],[x,backTop-10,backZ]));
+  return s;
+}
+function detailedStool(cx, cz){
+  const s=[]; const n=22, rX=56, rZ=36, y=92;
+  for(let i=0;i<n;i++){ const a=i/n*Math.PI*2,b=(i+1)/n*Math.PI*2; s.push(seg([cx+Math.cos(a)*rX,y,cz+Math.sin(a)*rZ],[cx+Math.cos(b)*rX,y,cz+Math.sin(b)*rZ])); }
+  for(let t=-.82;t<.9;t+=.18) s.push(seg([cx-rX*Math.sqrt(1-t*t),y,cz+t*rZ],[cx+rX*Math.sqrt(1-t*t),y,cz+t*rZ]));
+  [[-30,-20],[30,-20],[-22,22],[24,22]].forEach(([dx,dz])=> s.push(seg([cx+dx,y,cz+dz],[cx+dx,0,cz+dz])));
+  return s;
+}
+function detailedCabinet(cx, cz){
+  const s=[]; const left=cx-128, right=cx+128, front=cz-35, top=340, cols=5, rows=5;
+  s.push(...box(cx,0,cz,256,340,70));
+  for(let i=1;i<rows;i++){ const y=i*(top/rows); s.push(seg([left,y,front],[right,y,front])); }
+  for(let i=1;i<cols;i++){ const x=left+i*(256/cols); s.push(seg([x,0,front],[x,top,front])); }
+  const cellW=256/cols, cellH=top/rows;
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const x0=left+c*cellW, y0=r*cellH;
+      for(let d=10; d<cellW+cellH-10; d+=12){
+        const x1=Math.max(0,d-cellH+8), y1=Math.max(0,cellH-d);
+        const x2=Math.min(cellW-8,d-8), y2=Math.min(cellH-8,cellH-8);
+        s.push(seg([x0+x1,y0+y1,front],[x0+x2,y0+y2,front]));
+      }
+      s.push(seg([x0+cellW*.63,y0+cellH*.53,front-1],[x0+cellW*.7,y0+cellH*.58,front-1]));
+      s.push(seg([x0+cellW*.7,y0+cellH*.58,front-1],[x0+cellW*.63,y0+cellH*.63,front-1]));
+    }
+  }
+  return s;
+}
+function boxCluster(){
+  const s=[];
+  const boxes=[[160,0,150,88,88,88,false],[160,90,136,88,88,88,false],[250,0,205,94,76,94,false],[325,0,150,96,88,96,true],[388,0,202,88,72,88,true]];
+  boxes.forEach(([x,y,z,w,h,d,open])=>{
+    s.push(...box(x,y,z,w,h,d));
+    for(let t=-w/2+12;t<w/2-8;t+=13) s.push(seg([x+t,y+h,z-d/2],[x+t,y,z-d/2]));
+    if(open){
+      s.push(seg([x-w/2,y+h,z-d/2],[x-w/2-32,y+h+18,z-d/2-8]), seg([x+w/2,y+h,z-d/2],[x+w/2+32,y+h+12,z-d/2+8]), seg([x-w/2,y+h,z+d/2],[x-w/2-28,y+h+10,z+d/2+14]), seg([x+w/2,y+h,z+d/2],[x+w/2+30,y+h+8,z+d/2-18]));
+    }
+  });
+  return s;
+}
+const objects=[
+  {name:'REPEATING', start:0, end:28, color:C.coral, labelPos:[-145,285,-270], segs:detailedWindow(-165,222,-270)},
+  {name:'TYPING', start:5, end:35, color:C.coral, labelPos:[-92,165,20], segs:detailedDesk()},
+  {name:'COPYING', start:10, end:42, color:C.coral, labelPos:[-355,90,148], segs:detailedChair(-355,170)},
+  {name:'SITTING', start:15, end:50, color:C.coral, labelPos:[-72,92,242], segs:detailedStool(-72,250)},
+  {name:'OPENING', start:22, end:64, color:C.coral, labelPos:[260,280,-86], segs:detailedCabinet(285,-96)},
+  {name:'SWITCHING', start:30, end:85, color:C.coral, labelPos:[258,118,160], segs:boxCluster()}
+];
+
+function project(p){
+  const target=camera.target;
+  const cp=Math.cos(camera.pitch), sp=Math.sin(camera.pitch), cy=Math.cos(camera.yaw), sy=Math.sin(camera.yaw);
+  const cam=[target[0]+camera.dist*cp*sy, target[1]+camera.dist*sp, target[2]+camera.dist*cp*cy];
+  const fx=target[0]-cam[0], fy=target[1]-cam[1], fz=target[2]-cam[2];
+  const fl=Math.hypot(fx,fy,fz)||1; const F=[fx/fl,fy/fl,fz/fl];
+  let rx=-F[2], ry=0, rz=F[0]; const rl=Math.hypot(rx,ry,rz)||1; rx/=rl; rz/=rl;
+  const ux=ry*F[2]-rz*F[1], uy=rz*F[0]-rx*F[2], uz=rx*F[1]-ry*F[0];
+  const vx=p[0]-cam[0], vy=p[1]-cam[1], vz=p[2]-cam[2];
+  const viewX=vx*rx+vy*ry+vz*rz, viewY=vx*ux+vy*uy+vz*uz, depth=vx*F[0]+vy*F[1]+vz*F[2];
+  const focal=920, safeDepth=Math.max(120,depth), scale=focal/safeDepth;
+  return [790+viewX*scale,500-viewY*scale];
+}
+function el(tag, attrs={}){ const node=document.createElementNS(NS,tag); for(const [k,v] of Object.entries(attrs)) node.setAttribute(k,v); return node; }
+
+function drawTextLine(g,a,b,text,color,opacity=1,density=1,objectSeed=0){
+  const A=project(a), B=project(b); const dx=B[0]-A[0], dy=B[1]-A[1], len=Math.hypot(dx,dy); if(len<1.5) return;
+  const angle=Math.atan2(dy,dx)*180/Math.PI; const fontSize=4.35; const step=Math.max(3.35, 4.7 / density); const n=Math.max(1,Math.floor(len/step));
+  const chars = text || pseudoText;
+  const now = performance.now();
+  for(let i=0;i<n;i++){
+    const t=(i+.32)/n; let x=A[0]+dx*t, y=A[1]+dy*t;
+    if(idleFloat > 0){
+      const driftX = Math.sin(i*.55 + now*.0025 + objectSeed*1.7) * idleFloat * 3.2;
+      const driftY = Math.cos(i*.37 + now*.0032 + objectSeed*2.3) * idleFloat * 5.6;
+      x += driftX; y += driftY;
+    }
+    const ch = chars[(i + correct) % chars.length] || '·';
+    const te=el('text',{x,y,fill:color,'fill-opacity':Math.max(.15,opacity*(1-idleFloat*.12)),'font-family':'Courier New, monospace','font-size':fontSize,'font-weight':700,transform:`rotate(${angle} ${x} ${y})`,'text-anchor':'middle'});
+    te.textContent=ch; g.appendChild(te);
+  }
+}
+function drawLabel(obj){
+  const [x,y]=project(obj.labelPos); const w=26+obj.name.length*8.25;
+  stage.appendChild(el('rect',{x:x-4,y:y-17,width:w,height:26,fill:C.acid,'fill-opacity':.98,rx:1}));
+  const t=el('text',{x:x+7,y:y+1,fill:C.ink,'font-size':13,'font-family':'Arial','font-weight':700}); t.textContent=obj.name; stage.appendChild(t);
+}
+function seeded01(seed){ const x=Math.sin(seed*12.9898+78.233)*43758.5453; return x-Math.floor(x); }
+function duplicateStyle(objectIndex, copyIndex){
+  const seed=(objectIndex+1)*101+copyIndex*43;
+  const baseAngles=[0.28,1.18,2.26,3.24,4.05,5.16,2.78,5.74];
+  const angle=baseAngles[(copyIndex-1)%baseAngles.length]+objectIndex*.22+seeded01(seed)*.25;
+  const radius=56+copyIndex*26+seeded01(seed+2)*20;
+  const ox=Math.cos(angle)*radius;
+  const oz=Math.sin(angle)*radius*1.18;
+  const oy=(seeded01(seed+5)-.5)*18 + copyIndex*3.2;
+  const colour=seeded01(seed+9)>.52 ? C.coral : C.acid;
+  return {ox,oy,oz,colour};
+}
+function render(){
+  stage.innerHTML='';
+  objects.forEach((obj, objectIndex)=>{
+    const progress=Math.max(0,Math.min(1,(correct-obj.start)/(obj.end-obj.start)));
+    if(progress<=0) return;
+    const g=el('g');
+    const upto=Math.ceil(obj.segs.length*progress);
+    const lineDensity = 1 + typingIntensity*.4 + idleFloat*.08;
+    obj.segs.slice(0,upto).forEach(s=>drawTextLine(g,s.a,s.b,typedHistory,obj.color,.94,lineDensity,objectIndex));
+    stage.appendChild(g); drawLabel(obj);
+    const overlaps = overlapAmount();
+    if(progress>=1 && overlaps>0){
+      for(let k=1;k<=overlaps;k++){
+        const sty=duplicateStyle(objectIndex,k); const gg=el('g');
+        obj.segs.forEach(s=>drawTextLine(gg,[s.a[0]+sty.ox,s.a[1]+sty.oy,s.a[2]+sty.oz],[s.b[0]+sty.ox,s.b[1]+sty.oy,s.b[2]+sty.oz],typedHistory,sty.colour,Math.max(.24,.78-k*.055),.96+typingIntensity*.2,objectIndex+k));
+        stage.appendChild(gg);
+      }
+    }
+  });
+}
+
+function resizeCanvases(){
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  asciiBg.width=Math.floor(innerWidth*dpr); asciiBg.height=Math.floor(innerHeight*dpr);
+  asciiBg.style.width=innerWidth+'px'; asciiBg.style.height=innerHeight+'px';
+  bgCtx.setTransform(dpr,0,0,dpr,0,0);
+}
+function drawAsciiBackground(){
+  const w=innerWidth,h=innerHeight; bgCtx.clearRect(0,0,w,h);
+  const chars=(typedHistory || pseudoText).slice(-900);
+  const density=Math.min(.92,densityValue + sceneNoise*.06);
+  const cell=15; const now=performance.now();
+  bgCtx.font='700 10px "Courier New", monospace'; bgCtx.textBaseline='top';
+  let idx=0;
+  for(let y=24;y<h-10;y+=cell){
+    for(let x=280;x<w-440;x+=cell*.92){
+      const nx=x/w, ny=y/h;
+      const wave=(.5+.5*Math.sin((x*.011)+(now*.0012)))*(.28+typingIntensity*.6);
+      const localDensity=Math.max(0,density*.56 + wave*.22 + (Math.sin((y+x)*.006)*.035));
+      if(Math.random()>localDensity) continue;
+      const ch=chars[(idx + Math.floor(correct*.45)) % chars.length] || '·'; idx++;
+      let fill=`rgba(0,0,0,${0.03 + localDensity*.18})`;
+      let ox=0, oy=0;
+      if(idleFloat>0){
+        ox += Math.sin(now*.0018 + x*.01 + y*.005) * idleFloat * 2.5;
+        oy += Math.cos(now*.0015 + x*.006) * idleFloat * 2.8;
+      }
+      if((mistakeCount + backspaceCount) > 0 && Math.random() < Math.min(.14, sceneNoise*.2)) fill=`rgba(255,109,92,${0.12 + sceneNoise*.36})`;
+      bgCtx.fillStyle=fill; bgCtx.fillText(ch,x+ox,y+oy);
+    }
+  }
+}
+function drawWaveform(){
+  const w=waveCanvas.width,h=waveCanvas.height;
+  waveCtx.clearRect(0,0,w,h);
+  waveCtx.fillStyle='#fcfcf9'; waveCtx.fillRect(0,0,w,h);
+  waveCtx.strokeStyle='rgba(0,0,0,.1)'; waveCtx.lineWidth=1;
+  [h*.25,h*.5,h*.75].forEach(y=>{ waveCtx.beginPath(); waveCtx.moveTo(0,y); waveCtx.lineTo(w,y); waveCtx.stroke(); });
+  if(waveHistory.length<2) return;
+  const data=waveHistory.slice(-110); const step=w/Math.max(1,data.length-1);
+  waveCtx.fillStyle='rgba(200,255,43,.35)'; waveCtx.beginPath(); waveCtx.moveTo(0,h-6);
+  data.forEach((d,i)=>{ const x=i*step, y=h - 14 - d.density*(h*.58); waveCtx.lineTo(x,y); });
+  waveCtx.lineTo(w,h-6); waveCtx.closePath(); waveCtx.fill();
+  waveCtx.strokeStyle=C.coral; waveCtx.lineWidth=2.2; waveCtx.beginPath();
+  data.forEach((d,i)=>{ const x=i*step, y=h - 18 - d.speed*(h*.52); if(i===0) waveCtx.moveTo(x,y); else waveCtx.lineTo(x,y); });
+  waveCtx.stroke();
+  data.forEach((d,i)=>{
+    if(d.errors <= 0 && d.back <= 0) return;
+    const x=i*step; const e=Math.min(1,d.errors*.45 + d.back*.24);
+    waveCtx.fillStyle='rgba(0,0,0,.9)'; waveCtx.fillRect(x-1.2,h-8 - e*(h*.45),2.4,8 + e*(h*.45));
+  });
+}
+function metricsLoop(){
+  const now=performance.now();
+  if(now - lastMetricTick > 160){
+    const m=metricSnapshot();
+    waveHistory.push({ speed:Math.min(1,rollingCPS/7.5), density:densityValue, errors:Math.min(1,m.errorRecent/5), back:Math.min(1,m.backRecent/4) });
+    if(waveHistory.length>130) waveHistory.shift();
+    updateMetrics(); drawWaveform(); render();
+    lastMetricTick = now;
+  }
+  drawAsciiBackground();
+  requestAnimationFrame(metricsLoop);
+}
+
+input.addEventListener('keydown', e => {
+  if((e.metaKey || e.ctrlKey) && ['a','c','v','x'].includes(e.key.toLowerCase())) return;
+  if(e.key === 'Tab'){ e.preventDefault(); return; }
+  if(e.key === 'Backspace'){ e.preventDefault(); if(!bigPrompt.classList.contains('hide')) bigPrompt.classList.add('hide'); onBackspace(); return; }
+  if(e.key === 'Enter'){ e.preventDefault(); handleTypedChar('\n'); return; }
+  if(e.key.length === 1){ e.preventDefault(); handleTypedChar(e.key); return; }
+});
+input.addEventListener('paste', e => e.preventDefault());
+input.addEventListener('input', () => { input.value = displayBuffer; });
+
+stage.addEventListener('pointerdown', e=>{ dragging=true; lx=e.clientX; ly=e.clientY; stage.classList.add('dragging'); stage.setPointerCapture(e.pointerId); });
+stage.addEventListener('pointermove', e=>{ if(!dragging) return; camera.yaw -= (e.clientX-lx)*0.0052; camera.pitch = Math.max(-0.02, Math.min(1.02, camera.pitch + (e.clientY-ly)*0.0044)); lx=e.clientX; ly=e.clientY; render(); });
+stage.addEventListener('pointerup', ()=>{ dragging=false; stage.classList.remove('dragging'); });
+stage.addEventListener('wheel', e=>{ e.preventDefault(); camera.dist = Math.max(620, Math.min(2000, camera.dist + e.deltaY*.7)); render(); }, {passive:false});
+document.getElementById('zoomIn').onclick = ()=>{ camera.dist = Math.max(620, camera.dist - 120); render(); };
+document.getElementById('zoomOut').onclick = ()=>{ camera.dist = Math.min(2000, camera.dist + 120); render(); };
+document.getElementById('restart').onclick = resetAll;
+
+function resetAll(){
+  correct=0; totalWords=0; typedHistory=''; displayBuffer=''; mistakeCount=0; backspaceCount=0; totalAttempts=0;
+  typingEvents=[]; waveHistory=[]; rollingCPS=0; rollingWPM=0; densityValue=.08; typingIntensity=0; sceneNoise=0; idleMs=9999; idleFloat=0;
+  lastCharTime=0; sessionStart=performance.now(); lastMetricTick=performance.now(); currentState='start';
+  camera={ yaw:-0.64, pitch:0.34, dist:1080, target:[0,115,0] };
+  pile.innerHTML=''; ghostLayer.innerHTML=''; input.value=''; bigPrompt.classList.remove('hide'); updateSource(); updateCounter(); updateMetrics(); drawWaveform(); render(); setTimeout(()=>input.focus(),50);
+}
+window.addEventListener('resize', ()=>{ resizeCanvases(); drawWaveform(); render(); });
+resizeCanvases(); resetAll(); requestAnimationFrame(metricsLoop);
+})();
+</script>
+</body>
+</html>
